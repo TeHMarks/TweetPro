@@ -23,7 +23,7 @@ public class Tweet implements TweetInterface
 	private URL media_url;
 	private Tweet originalTweet;
 	
-	public Tweet(){}
+	public Tweet(){ this.hashtags = new ArrayList<>(); }
 	
 	@Override
 	public long getID() { return tweetID; }
