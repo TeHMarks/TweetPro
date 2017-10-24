@@ -5,27 +5,31 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Comparator;
-import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
 import java.util.Scanner;
-import java.util.Set;
 import java.util.stream.Collectors;
 import java.net.MalformedURLException;
 import java.net.URL;
 
 import it.uniroma1.lcl.tweetpro.interfaces.ParsingException;
+import it.uniroma1.lcl.tweetpro.interfaces.HashtagStrategyInterface;
 import it.uniroma1.lcl.tweetpro.interfaces.TweetCorpusInterface;
+import it.uniroma1.lcl.tweetpro.interfaces.UniqueUserStrategyInterface;
 
 
 public class TweetCorpus implements TweetCorpusInterface
 {
 	private File tweets;
-	private int k;
+	private HashtagStrategyInterface strategy;
+	private UniqueUserStrategyInterface userStrategy;
 
-	public TweetCorpus(File tweets) { this.tweets = tweets; }
+	public TweetCorpus(File tweets)
+	{
+		this.tweets = tweets;
+		this.strategy = new AdvancedCountMin();
+		this.userStrategy = new AdvancedLogLog();
+	}
 
 	@Override
 	public Iterator<Tweet> iterator()
@@ -166,10 +170,7 @@ public class TweetCorpus implements TweetCorpusInterface
 
 				case "\"text\"":{
 					field[1] = String.join(":", Arrays.copyOfRange(field, 1, field.length));
-//					System.out.println(splittedTweet[i]);
-//					System.out.println(field[1]);
 					String tweetText = field[1].substring(1, field[1].length()-2);
-//					System.out.println(tweetText);
 					tb.setText(tweetText);
 					break;
 				}
@@ -223,7 +224,6 @@ public class TweetCorpus implements TweetCorpusInterface
 							}
 							i++;
 						}
-//					System.out.println(hl);
 					tb.setHashtags(hl);
 					break;
 				}
@@ -277,56 +277,15 @@ public class TweetCorpus implements TweetCorpusInterface
 
 	@Override
 	public List<String> getTopHashtags(int k) {
-		this.k = k;
-		List<String> topHashtags = countMin(getHashtagsList()).stream().collect(Collectors.toList());
+		List<String> topHashtags = strategy.execute(getHashtagsList(), k).stream().collect(Collectors.toList());
 		return topHashtags;
 	}
+	
+	public void setTopHashtagsStrategy(HashtagStrategyInterface strategy)
+	{
+		this.strategy = strategy;
+	}
 
-	private Set<String> countMin(List<String> hashtagsList)
-	{
-		HashMap<String, Integer> hashtagsMap = new HashMap<>();
-		int mapSize = k * 100;
-		for(String s : hashtagsList)
-		{
-			if(hashtagsMap.containsKey(s) || hashtagsMap.size() < mapSize)
-			{
-				hashtagsMap.put(s, hashtagsMap.get(s) == null ? 1 : hashtagsMap.get(s)+1);
-			}
-			else
-			{				
-				int oldValue = hashtagsMap.remove(getMinKey(hashtagsMap));
-				hashtagsMap.put(s, oldValue++);
-			}
-		}
-		hashtagsMap = (HashMap<String, Integer>) hashtagsMap.entrySet().stream()
-				.sorted(Map.Entry.<String, Integer>comparingByValue().reversed())
-				.limit(k).collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-		
-		return hashtagsMap.keySet();
-	}
-	
-	//VERSIONE SEMPLIFICATA DEL COUNT MIN, SENZA LIMITAZIONE SULLA GRANDEZZA DELLA MAPPA
-	@SuppressWarnings("unused")
-	private Set<String> simpleCountMin(List<String> hashtagsList)
-	{
-		HashMap<String, Integer> hashtagsMap = new HashMap<>();
-		for(String s : hashtagsList)
-		{
-			hashtagsMap.put(s, hashtagsMap.get(s) == null ? 1 : hashtagsMap.get(s)+1);
-		}
-		hashtagsMap = (HashMap<String, Integer>) hashtagsMap.entrySet().stream()
-				.sorted(Map.Entry.<String, Integer>comparingByValue().reversed())
-				.collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-		
-		return hashtagsMap.keySet();
-	}
-	
-	// PRENDO LA STRINGA CHE HA NUMERO DI OCCORRENZE PIU BASSO
-	private String getMinKey(HashMap<String, Integer> hashtagsMap)
-	{
-		return hashtagsMap.entrySet().stream().min(Comparator.comparingInt(Map.Entry::getValue)).get().getKey();
-	}
-	
 	private List<String> getHashtagsList()
 	{
 		Scanner sc;
@@ -341,10 +300,29 @@ public class TweetCorpus implements TweetCorpusInterface
 		} catch(IOException e) { e.printStackTrace(); }
 		return hashtagsList;
 	}
-
+	
+	private List<Long> getUserIdList()
+	{
+		Scanner sc;
+		List<Long> idUserList = new ArrayList<>();
+		try {
+			sc = new Scanner(new FileInputStream(tweets), "UTF-8");
+			while(sc.hasNextLine())
+			{
+				Tweet tw = tweetParser(sc.nextLine());
+				idUserList.add(tw.getUser().getID());
+			}
+		} catch(IOException e) { e.printStackTrace(); }
+		return idUserList;
+	}
+	
 	@Override
 	public int getUniqueUsersCount() {
-		// TODO Auto-generated method stub
-		return 0;
+		return userStrategy.execute(getUserIdList());
+	}
+	
+	public void setUniqueUsersCountStrategy(UniqueUserStrategyInterface userStrategy)
+	{
+		this.userStrategy = userStrategy;
 	}
 }
